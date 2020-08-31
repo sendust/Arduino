@@ -1,0 +1,147 @@
+/*  Digital input push button class
+ *  Made by sendust 2020/8/29
+ *  Has feed back LED
+ *  detect failing edge -> .scan() function will return input pin number
+ * 
+ * 
+ */
+
+#define LED_DECAY 5000
+#define BUTTON_DELAY 100
+#define LONGPRESS 8000
+
+class pushbutton_withled
+{
+  private:
+  int m_keyinput;
+  int m_ledoutput;
+  int m_button_previous;
+  int m_button_now;
+  int m_result;
+  int m_longpress;
+  unsigned int m_led_duration = 0;
+  unsigned int m_count_push = 0;
+  unsigned long m_last_transition;
+  const unsigned long m_guard_time = 0xFFFFFFFF - BUTTON_DELAY;
+
+  public:
+
+  pushbutton_withled(int keyinput, int ledoutput)   // Initiator (define button input pin, led outpupt pin)
+  {
+    m_keyinput = keyinput;
+    m_ledoutput = ledoutput;
+    pinMode(keyinput, INPUT_PULLUP);
+    pinMode(ledoutput, OUTPUT);
+    m_last_transition = millis();
+    m_button_previous = digitalRead(keyinput);
+    m_button_now = digitalRead(keyinput);
+    m_longpress = 0;
+  }
+
+  int scan(unsigned long time_milli)
+  {
+    m_button_now = digitalRead(m_keyinput);
+    m_result = 0;
+    if (m_button_now == 0)
+    {
+      m_longpress++;                        // detect long press
+      if (m_longpress == LONGPRESS)
+        m_result = m_keyinput * 100;        // return switch pin number * 100
+
+      if (m_button_previous == 1)
+        if (time_milli - m_last_transition > BUTTON_DELAY)
+          if (time_milli - m_last_transition < m_guard_time)     // prevent unsigned long overflow event
+          {
+            m_last_transition = time_milli;
+            m_led_duration = LED_DECAY;
+            m_result = m_keyinput;          // return switch pin number
+          }
+    }
+        
+    if (m_button_now == 1)
+    {
+      m_longpress = 0;                    // initialize long press count
+      if (m_button_previous == 0)
+        m_last_transition = time_milli;   // Record release time
+    }
+
+    if (m_led_duration)
+      m_led_duration--;
+      
+    digitalWrite(m_ledoutput, m_led_duration);   // on or off feedback LED
+
+    m_button_previous = m_button_now;
+    
+    if (m_result)
+    {
+      Serial.print("return value is ");
+      Serial.print(m_result);
+      Serial.print("  //  press count = ");
+      Serial.println(++m_count_push);
+    }
+
+    
+    return m_result;
+  }
+
+
+};
+
+class cHeartBeat
+{
+  private:
+  unsigned long m_count;
+  int m_pinLED;
+  unsigned long m_mask;
+
+  public:
+  cHeartBeat(int pinLED)            // define heartbeat LED pin
+  {
+    pinMode(pinLED, OUTPUT);
+    digitalWrite(pinLED, LOW);
+    m_pinLED = pinLED;
+    m_count = 0;
+    m_mask = 0x00003E00;
+  }
+
+  run()
+  {
+    // Serial.println(m_mask);
+    m_count++;
+    digitalWrite(m_pinLED, !((m_count & m_mask) && 1));
+  }
+  
+};
+
+
+pushbutton_withled btn_digital1(A0, 13);     // Define button input pin, LED output pin
+pushbutton_withled btn_digital2(A1, 13);
+pushbutton_withled btn_digital3(A2, 13);
+pushbutton_withled btn_digital4(A3, 13);
+cHeartBeat Heartbeat(11);
+
+
+unsigned long time_current;
+
+void setup() {
+  // put your setup code here, to run once:
+  
+  Serial.begin(115200);
+  Serial.println("----------  Start push button example code -----------------");
+  pinMode(A4, OUTPUT);
+  digitalWrite(A4, LOW);    // make GND for 4 push button
+  pinMode(8, OUTPUT);
+  digitalWrite(8, LOW);     // make GND for heartbeat LED
+
+  
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  time_current = millis();
+  btn_digital1.scan(time_current);
+  btn_digital2.scan(time_current);
+  btn_digital3.scan(time_current);
+  btn_digital4.scan(time_current);
+  Heartbeat.run();
+}
