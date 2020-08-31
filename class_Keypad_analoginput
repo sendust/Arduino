@@ -1,0 +1,77 @@
+/*  Keypad class by sendust
+ *  LCD with keypad shield
+ *  Created 2020/8/17
+ *  Last Modified 2020/8/17
+ * 
+ */
+
+
+class Keypad
+{
+  private:
+  unsigned long time_transition;
+  int adc_in;
+  int _adc_pin;
+  int key_prev;
+  int key_current;
+  
+  public:
+  void begin(int adc_pin);
+  int scan(unsigned long time_ms);
+  int result;
+};
+
+
+void Keypad::begin(int adc_pin)
+{
+  _adc_pin = adc_pin;
+  key_prev = 0;
+  time_transition = millis();
+  pinMode(adc_pin, INPUT);
+}
+
+int Keypad::scan(unsigned long time_ms)
+{
+  adc_in = analogRead(_adc_pin);
+  if (adc_in > 1000)
+    key_current = 0;
+  if (adc_in < 800)
+    key_current = 1;       // select key
+  if (adc_in < 600)
+    key_current = 2;       // left key
+  if (adc_in < 400)
+    key_current = 3;       // down key
+  if (adc_in < 200)
+    key_current = 4;       // up key
+  if (adc_in < 50)
+    key_current = 5;       // right key
+
+  if ((key_current) && (key_prev == 0))
+  {
+    key_prev = key_current;
+    time_transition = time_ms;
+    result = key_current;
+    return key_current;
+  }
+    else
+  {
+    key_prev = key_current;
+    result = 0;
+    return 0;
+  }
+}
+
+
+Keypad keypad;
+
+void setup() {
+  // put your setup code here, to run once:
+  keypad.begin(A0);       // Start keypad with Analog input pin
+  Serial.begin(57600);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  if (keypad.scan(millis()))
+    Serial.println(keypad.result);        // print pressed key
+}
