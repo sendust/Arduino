@@ -2,8 +2,11 @@
  *  Made by sendust 2020/8/29
  *  Has feed back LED
  *  detect failing edge -> .scan() function will return input pin number
- * 
- * 
+ *  Detect Long press
+ *  Heartbeat LED class
+ *  
+ *  
+ *  Last Modified 2020/8/31
  */
 
 #define LED_DECAY 5000
@@ -114,11 +117,11 @@ class cHeartBeat
 };
 
 
-pushbutton_withled btn_digital1(A0, 13);     // Define button input pin, LED output pin
-pushbutton_withled btn_digital2(A1, 13);
-pushbutton_withled btn_digital3(A2, 13);
-pushbutton_withled btn_digital4(A3, 13);
-cHeartBeat Heartbeat(11);
+pushbutton_withled btn_digital1(A1, 13);     // Define button input pin, LED output pin
+pushbutton_withled btn_digital2(A2, 13);
+pushbutton_withled btn_digital3(A3, 13);
+pushbutton_withled btn_digital4(A4, 13);
+cHeartBeat Heartbeat(10);                   // start heartbeat with LED pin number
 
 
 unsigned long time_current;
@@ -128,8 +131,8 @@ void setup() {
   
   Serial.begin(115200);
   Serial.println("----------  Start push button example code -----------------");
-  pinMode(A4, OUTPUT);
-  digitalWrite(A4, LOW);    // make GND for 4 push button
+  pinMode(A5, OUTPUT);
+  digitalWrite(A5, LOW);    // make GND for 4 push button
   pinMode(8, OUTPUT);
   digitalWrite(8, LOW);     // make GND for heartbeat LED
 
