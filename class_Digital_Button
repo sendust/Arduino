@@ -2,12 +2,16 @@
  *  Made by sendust 2020/8/29
  *  Has feed back LED
  *  detect failing edge -> .scan() function will return input pin number
- * 
- * 
+ *  Detect Long press
+ *  Heartbeat LED class
+ *  
+ *  
+ *  Last Modified 2020/8/31
  */
 
 #define LED_DECAY 5000
 #define BUTTON_DELAY 100
+#define LONGPRESS 8000
 
 class pushbutton_withled
 {
@@ -17,6 +21,7 @@ class pushbutton_withled
   int m_button_previous;
   int m_button_now;
   int m_result;
+  int m_longpress;
   unsigned int m_led_duration = 0;
   unsigned int m_count_push = 0;
   unsigned long m_last_transition;
@@ -33,6 +38,7 @@ class pushbutton_withled
     m_last_transition = millis();
     m_button_previous = digitalRead(keyinput);
     m_button_now = digitalRead(keyinput);
+    m_longpress = 0;
   }
 
   int scan(unsigned long time_milli)
@@ -40,22 +46,27 @@ class pushbutton_withled
     m_button_now = digitalRead(m_keyinput);
     m_result = 0;
     if (m_button_now == 0)
+    {
+      m_longpress++;                        // detect long press
+      if (m_longpress == LONGPRESS)
+        m_result = m_keyinput * 100;        // return switch pin number * 100
+
       if (m_button_previous == 1)
         if (time_milli - m_last_transition > BUTTON_DELAY)
           if (time_milli - m_last_transition < m_guard_time)     // prevent unsigned long overflow event
           {
             m_last_transition = time_milli;
             m_led_duration = LED_DECAY;
-            m_result = m_keyinput;
-            Serial.print(m_keyinput);
-            Serial.print(" Button Pressed // ");
-            Serial.print("press count = ");
-            Serial.println(++m_count_push);
+            m_result = m_keyinput;          // return switch pin number
           }
+    }
         
     if (m_button_now == 1)
+    {
+      m_longpress = 0;                    // initialize long press count
       if (m_button_previous == 0)
         m_last_transition = time_milli;   // Record release time
+    }
 
     if (m_led_duration)
       m_led_duration--;
@@ -63,35 +74,18 @@ class pushbutton_withled
     digitalWrite(m_ledoutput, m_led_duration);   // on or off feedback LED
 
     m_button_previous = m_button_now;
+    
+    if (m_result)
+    {
+      Serial.print("return value is ");
+      Serial.print(m_result);
+      Serial.print("  //  press count = ");
+      Serial.println(++m_count_push);
+    }
+
+    
     return m_result;
   }
 
 
 };
-
-pushbutton_withled btn_digital1(3, 13);     // Define button input pin, LED output pin
-pushbutton_withled btn_digital2(4, 13);
-pushbutton_withled btn_digital3(5, 13);
-pushbutton_withled btn_digital4(6, 13);
-
-unsigned long time_current;
-
-void setup() {
-  // put your setup code here, to run once:
-  
-  Serial.begin(115200);
-  Serial.println("----------  Start push button example code -----------------");
-  pinMode(7, OUTPUT);
-  digitalWrite(7, LOW);
-
-  
-}
-
-void loop() {
-  // put your main code here, to run repeatedly:
-  time_current = millis();
-  btn_digital1.scan(time_current);
-  btn_digital2.scan(time_current);
-  btn_digital3.scan(time_current);
-  btn_digital4.scan(time_current);
-}
