@@ -1,0 +1,246 @@
+
+/*  EVS Mplay clone controller
+ *  Made by sendust 2020/8/29 
+ *   
+ *  Digital input push button class
+ *  Has button feed back LED
+ *  detect failing edge -> .scan() function will return input pin number
+ *  Detect Long press
+ *  Heartbeat LED class
+ *  Softserial class
+ *  
+ *  
+ *  Last Modified 2020/9/2
+ */
+
+#include <SoftwareSerial.h>
+
+
+#define LED_DECAY 5000
+#define BUTTON_DELAY 100
+#define LONGPRESS 8000
+
+enum BTN_SET
+{
+  BTN_NONE,
+  BTN_PREV,
+  BTN_NEXT,
+  BTN_PAUSE,
+  BTN_LOAD,
+  BTN_PLAY,
+  BTN_LONG_PREV,
+  BTN_LONG_NEXT,
+  BTN_LONG_PAUSE,
+  BTN_LONG_LOAD,
+  BTN_LONG_PLAY,
+};
+
+
+
+class pushbutton_withled
+{
+  private:
+  int m_keyinput;
+  int m_ledoutput;
+  int m_button_previous;
+  int m_button_now;
+
+  int m_longpress;
+  int m_return_short;
+  int m_return_long;
+  unsigned int m_led_duration = 0;
+  unsigned int m_count_push = 0;
+  unsigned long m_last_transition;
+  const unsigned long m_guard_time = 0xFFFFFFFF - BUTTON_DELAY;
+
+  public:
+
+  pushbutton_withled(int keyinput, int ledoutput, int return_short, int return_long)   // Initiator (define button input pin, led outpupt pin)
+  {
+    m_keyinput = keyinput;
+    m_ledoutput = ledoutput;
+    pinMode(keyinput, INPUT_PULLUP);
+    pinMode(ledoutput, OUTPUT);
+    m_last_transition = millis();
+    m_button_previous = digitalRead(keyinput);
+    m_button_now = digitalRead(keyinput);
+    m_longpress = 0;
+    m_return_short = return_short;
+    m_return_long = return_long;
+  }
+  
+  int m_result;
+
+  int scan(unsigned long time_milli)
+  {
+    m_button_now = digitalRead(m_keyinput);
+    m_result = BTN_NONE;          // BTN_NONE = 0
+    if (m_button_now == 0)
+    {
+      m_longpress++;                        // detect long press
+      if (m_longpress == LONGPRESS)
+        m_result = m_return_long;        // return pre defined value for long press
+
+      if (m_button_previous == 1)
+        if (time_milli - m_last_transition > BUTTON_DELAY)
+          if (time_milli - m_last_transition < m_guard_time)     // prevent unsigned long overflow event
+          {
+            m_last_transition = time_milli;
+            m_led_duration = LED_DECAY;
+            m_result = m_return_short;          // return pre defined value for short press
+          }
+    }
+        
+    if (m_button_now == 1)
+    {
+      m_longpress = 0;                    // initialize long press count
+      if (m_button_previous == 0)
+        m_last_transition = time_milli;   // Record release time
+    }
+
+    if (m_led_duration)
+      m_led_duration--;
+      
+    digitalWrite(m_ledoutput, m_led_duration);   // on or off feedback LED
+
+    m_button_previous = m_button_now;
+    
+    if (m_result)
+    {
+      Serial.print("return value is ");
+      Serial.print(m_result);
+      Serial.print("  //  press count = ");
+      Serial.println(++m_count_push);
+    }
+
+    
+    return m_result;
+  }
+
+
+};
+
+class cHeartBeat
+{
+  private:
+  unsigned long m_count;
+  int m_pinLED;
+  unsigned long m_mask;
+
+  public:
+  cHeartBeat(int pinLED)            // define heartbeat LED pin
+  {
+    pinMode(pinLED, OUTPUT);
+    digitalWrite(pinLED, LOW);
+    m_pinLED = pinLED;
+    m_count = 0;
+    m_mask = 0x00003E00;
+  }
+
+  run()
+  {
+    // Serial.println(m_mask);
+    m_count++;
+    digitalWrite(m_pinLED, !((m_count & m_mask) && 1));
+  }
+  
+};
+
+
+class serialprotocol
+{
+  private:
+  SoftwareSerial* softserial;
+  int pin_sendLED;          // serial communication feedback LED
+  int delay_sendLED;        // serial communication feedback LED on time duration
+
+
+  public:
+  serialprotocol(int rx, int tx)
+  {
+    SoftwareSerial new_serial(rx, tx);
+    new_serial.begin(9600);
+    softserial = &new_serial;
+    pin_sendLED = 0;          // turn off LED
+  }
+
+  void set_feedback_led(int LEDpin)
+  {
+    pinMode(LEDpin, OUTPUT);
+    digitalWrite(LEDpin, HIGH);      // turn off LED
+    pin_sendLED = LEDpin;
+  }
+
+  void send2byte(char a, char b)
+  {
+    softserial->write(a);
+    softserial->write(b);
+    delay_sendLED = LED_DECAY;
+    Serial.print("Send data ");
+    Serial.print(a);
+    Serial.print(" / ");
+    Serial.println(b);
+  }
+
+   void show_data_led()       // serial data send feedback LED
+   {
+      if (delay_sendLED)
+      {
+        delay_sendLED--;
+        digitalWrite(pin_sendLED, delay_sendLED);
+      }
+   }
+   
+};
+
+pushbutton_withled btn_digital1(A1, 13, BTN_PREV, BTN_LONG_PREV);     // Define button input pin, LED output pin
+pushbutton_withled btn_digital2(A2, 13, BTN_NEXT, BTN_LONG_NEXT);
+pushbutton_withled btn_digital3(A3, 13, BTN_PAUSE, BTN_LONG_PAUSE);
+pushbutton_withled btn_digital4(A4, 13, BTN_LOAD, BTN_LONG_LOAD);
+cHeartBeat Heartbeat(10);                   // start heartbeat with LED pin number
+
+
+unsigned long time_current;
+
+void setup() {
+  // put your setup code here, to run once:
+  
+  Serial.begin(115200);
+  Serial.println("----------  Start push button example code -----------------");
+  pinMode(A5, OUTPUT);
+  digitalWrite(A5, LOW);    // make GND for 4 push button
+  pinMode(8, OUTPUT);
+  digitalWrite(8, LOW);     // make GND for heartbeat LED
+
+  
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  time_current = millis();
+  btn_digital1.scan(time_current);
+  btn_digital2.scan(time_current);
+  btn_digital3.scan(time_current);
+  btn_digital4.scan(time_current);
+  Heartbeat.run();
+
+  switch(btn_digital1.m_result | btn_digital2.m_result | btn_digital3.m_result | btn_digital4.m_result)
+  {
+    case BTN_NONE:
+      break;
+    case BTN_PREV:
+      Serial.println("PREV pressed");
+      break;
+    case BTN_NEXT:
+      Serial.println("NEXT pressed");
+      break;
+    case BTN_PAUSE:
+      Serial.println("PAUSE pressed");
+      break;
+    case BTN_LOAD:
+      Serial.println("LOAD pressed");
+      break;
+    default:
+      break;
+  };
+}
