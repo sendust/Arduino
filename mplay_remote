@@ -1,0 +1,205 @@
+/*
+  Remote Box for sendust multi channel player
+  EVS Mplay clone controller
+  5 BUTTON (pull up, GND common, each terminal is to analog input)
+  2 LED ([run, send], active low, 5V common, each terminal to digital output)
+  5 LED ([button led], active low, 5V common, each terminal to digital output)
+  
+  Made by sendust 2020/6/19
+  2020/6/18  ; add play button long press action
+  2020/6/19  ; Improve long press behavior
+  2020/6/22  ; Controller for TS-3 ; swap between load and pause button, led
+  2020/8/13  ; change breathe LED  (blink -> flashing)
+ */
+
+#include <SoftwareSerial.h>
+
+#define BTN_PLAY A0
+#define BTN_PAUSE A1
+#define BTN_LOAD A2
+#define BTN_PREV A3
+#define BTN_NEXT A4
+
+#define LED_SEND 10
+#define LED_RUN 9
+#define LED_PLAY 6
+#define LED_PAUSE 5
+#define LED_LOAD 4
+#define LED_PREV 3
+#define LED_NEXT 2
+#define LED_INTERNAL 13
+
+
+#define SOFT_SERIAL_TX 8
+#define SOFT_SERIAL_RX 7
+#define LED_PERIOD 0x00001FFF         // led on duration for each button press
+
+
+SoftwareSerial sSerial(SOFT_SERIAL_RX, SOFT_SERIAL_TX);
+int btn_press, btn_press_old;
+int led_on = LED_SEND;
+unsigned long count = 0, time_millis, led_timer = LED_PERIOD;
+unsigned long time_btn_press = 0;
+
+void send_command(int in_key)
+{
+  digitalWrite(LED_PLAY, HIGH);
+  digitalWrite(LED_PAUSE, HIGH);
+  digitalWrite(LED_LOAD, HIGH);
+  digitalWrite(LED_PREV, HIGH);
+  digitalWrite(LED_NEXT, HIGH); 
+  
+  switch (in_key)
+  {
+  case 1:       // play
+    led_on = LED_PLAY;
+    led_timer = LED_PERIOD;
+    sSerial.write(0x21);
+    sSerial.write(0xDE);
+    break;
+    
+  case 2:       // pause
+    led_on = LED_PAUSE;
+    led_timer = LED_PERIOD;
+    sSerial.write(0x22);
+    sSerial.write(0xDD);
+    break;
+    
+  case 3:       // load
+    led_on = LED_LOAD;
+    led_timer = LED_PERIOD;
+    sSerial.write(0x24);
+    sSerial.write(0xDB);
+    break;
+    
+  case 4:       // prev
+    led_on = LED_PREV;
+    led_timer = LED_PERIOD;
+    sSerial.write(0x33);
+    sSerial.write(0xBB);
+    break;
+    
+  case 5:       // next
+    led_on = LED_NEXT;
+    led_timer = LED_PERIOD;
+    sSerial.write(0x11);
+    sSerial.write(0xEE);
+    break;
+
+  case 101:      // long press play
+    led_on = LED_PLAY;
+    led_timer = LED_PERIOD;
+    sSerial.write(0x21);
+    sSerial.write(0xEF);
+  break;
+   
+  default:
+    break;
+  }
+}
+
+
+void setup() {
+  // put your setup code here, to run once:
+  pinMode(BTN_PLAY, INPUT_PULLUP);
+  pinMode(BTN_PAUSE, INPUT_PULLUP);
+  pinMode(BTN_LOAD, INPUT_PULLUP);
+  pinMode(BTN_PREV, INPUT_PULLUP);
+  pinMode(BTN_NEXT, INPUT_PULLUP);
+
+  pinMode(LED_SEND, OUTPUT);
+  pinMode(LED_RUN, OUTPUT);
+  pinMode(LED_PLAY, OUTPUT);
+  pinMode(LED_PAUSE, OUTPUT);
+  pinMode(LED_LOAD, OUTPUT);
+  pinMode(LED_PREV, OUTPUT);
+  pinMode(LED_NEXT, OUTPUT);
+  pinMode(LED_INTERNAL, OUTPUT);
+
+  digitalWrite(LED_SEND, HIGH);
+  digitalWrite(LED_RUN, HIGH);
+  digitalWrite(LED_PLAY, HIGH);
+  digitalWrite(LED_PAUSE, HIGH);
+  digitalWrite(LED_LOAD, HIGH);
+  digitalWrite(LED_PREV, HIGH);
+  digitalWrite(LED_NEXT, HIGH);
+  
+  Serial.begin(9600);         // begin serial for debug 
+  sSerial.begin(9600);         // begin soft serial for Remote controller (8bit, none, 1bit only)
+
+}
+
+int key_input(unsigned long time_press)
+{
+  
+  static unsigned long long_press_play = 0;
+
+  if (long_press_play == 0x00004FFF)      // long press until count reach this value
+  {
+      //long_press_play = 0;                // reset count (Before 2020/6/18)
+      Serial.println("PLAY long press");
+      long_press_play = 0x00005000;         // new 2020/6/19
+      return 101;
+  }
+  
+  if (!digitalRead(BTN_PLAY)) 
+  {
+    long_press_play++;
+    return 1;
+  }
+
+  long_press_play = 0;        // reset long_press_play if play button is not pressed
+        
+  if (!digitalRead(BTN_PAUSE)) return 2;
+  if (!digitalRead(BTN_LOAD)) return 3;
+  if (!digitalRead(BTN_PREV)) return 4;
+  if (!digitalRead(BTN_NEXT)) return 5;
+  return 0;
+}
+
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  unsigned long time_interval;
+  while(1)
+  {
+    count++;
+    time_millis = millis();
+    btn_press = key_input(time_millis);                     // get button press time
+    // digitalWrite(LED_INTERNAL, (count >> 12) & 1);          // Blink internal LED
+    digitalWrite(LED_INTERNAL, ! (count  & 0x007E00) && 1);          // Flash internal LED
+    digitalWrite(LED_RUN, (count  & 0x007E00) && 1);
+    time_interval = abs(time_millis - time_btn_press);
+
+    if ((btn_press && !btn_press_old) && (time_interval > 200))  // detect failing edge only
+    {
+      time_btn_press = time_millis;
+      Serial.println(time_interval);
+      Serial.println(btn_press);
+      send_command(btn_press);
+    }
+
+    if (btn_press > 100)
+    {
+      send_command(btn_press);
+    }
+
+    if (btn_press)              // debounding (ignore raising edge spike while releasing button)
+      time_btn_press = time_millis;
+
+    if (led_timer)
+    {
+      digitalWrite(led_on, LOW);      // turn on button led
+      digitalWrite(LED_SEND, LOW);    // turn on send led
+      if (led_timer == 1)             // turn off send led, button led
+      {
+        digitalWrite(led_on, HIGH);
+        digitalWrite(LED_SEND, HIGH);
+      }
+      led_timer--;
+    }
+
+    btn_press_old = btn_press;      // save previous button state
+    
+  }
+}
