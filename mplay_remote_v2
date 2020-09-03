@@ -151,8 +151,8 @@ class serialprotocol
 {
   private:
   SoftwareSerial* softserial;
-  int pin_sendLED;          // serial communication feedback LED
-  int delay_sendLED;        // serial communication feedback LED on time duration
+  int m_pin_sendLED;          // serial communication feedback LED
+  int m_delay_sendLED;        // serial communication feedback LED on time duration
 
 
   public:
@@ -161,21 +161,21 @@ class serialprotocol
     SoftwareSerial new_serial(rx, tx);
     new_serial.begin(9600);
     softserial = &new_serial;
-    pin_sendLED = 0;          // turn off LED
+    m_pin_sendLED = 0;          // turn off LED
   }
 
   void set_feedback_led(int LEDpin)
   {
     pinMode(LEDpin, OUTPUT);
     digitalWrite(LEDpin, HIGH);      // turn off LED
-    pin_sendLED = LEDpin;
+    m_pin_sendLED = LEDpin;
   }
 
   void send2byte(char a, char b)
   {
     softserial->write(a);
     softserial->write(b);
-    delay_sendLED = LED_DECAY;
+    m_delay_sendLED = LED_DECAY;
     Serial.print("Send data ");
     Serial.print(a);
     Serial.print(" / ");
@@ -184,10 +184,10 @@ class serialprotocol
 
    void show_data_led()       // serial data send feedback LED
    {
-      if (delay_sendLED)
+      if (m_delay_sendLED)
       {
-        delay_sendLED--;
-        digitalWrite(pin_sendLED, delay_sendLED);
+        m_delay_sendLED--;
+        digitalWrite(m_pin_sendLED, m_delay_sendLED);
       }
    }
    
@@ -242,5 +242,5 @@ void loop() {
       break;
     default:
       break;
-  };
+  }
 }
