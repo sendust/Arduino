@@ -158,11 +158,11 @@ class serialprotocol
   public:
   serialprotocol(int rx, int tx)
   {
-    SoftwareSerial new_serial(rx, tx);
-    new_serial.begin(9600);
-    softserial = &new_serial;
+    softserial = new SoftwareSerial(rx, tx);
+    softserial->begin(9600);
     m_pin_sendLED = 0;          // turn off LED
   }
+
 
   void set_feedback_led(int LEDpin)
   {
@@ -170,6 +170,7 @@ class serialprotocol
     digitalWrite(LEDpin, HIGH);      // turn off LED
     m_pin_sendLED = LEDpin;
   }
+
 
   void send2byte(char a, char b)
   {
