@@ -1,4 +1,3 @@
-
 /*  EVS Mplay clone controller
  *  Made by sendust 2020/8/29 
  *   
@@ -10,7 +9,7 @@
  *  Softserial class
  *  
  *  
- *  Last Modified 2020/9/2
+ *  Last Modified 2020/9/4
  */
 
 #include <SoftwareSerial.h>
@@ -79,7 +78,10 @@ class pushbutton_withled
     {
       m_longpress++;                        // detect long press
       if (m_longpress == LONGPRESS)
+      {
         m_result = m_return_long;        // return pre defined value for long press
+        m_led_duration = LED_DECAY;
+      }
 
       if (m_button_previous == 1)
         if (time_milli - m_last_transition > BUTTON_DELAY)
@@ -101,7 +103,7 @@ class pushbutton_withled
     if (m_led_duration)
       m_led_duration--;
       
-    digitalWrite(m_ledoutput, m_led_duration);   // on or off feedback LED
+    digitalWrite(m_ledoutput, !m_led_duration);   // on or off feedback LED
 
     m_button_previous = m_button_now;
     
@@ -134,14 +136,14 @@ class cHeartBeat
     digitalWrite(pinLED, LOW);
     m_pinLED = pinLED;
     m_count = 0;
-    m_mask = 0x00003E00;
+    m_mask = 0x00001E00;
   }
 
   run()
   {
     // Serial.println(m_mask);
     m_count++;
-    digitalWrite(m_pinLED, !((m_count & m_mask) && 1));
+    digitalWrite(m_pinLED, ((m_count & m_mask) && 1));
   }
   
 };
@@ -156,10 +158,10 @@ class serialprotocol
 
 
   public:
-  serialprotocol(int rx, int tx)
+  serialprotocol(int rx, int tx, int baudrate)
   {
     softserial = new SoftwareSerial(rx, tx);
-    softserial->begin(9600);
+    softserial->begin(baudrate);
     m_pin_sendLED = 0;          // turn off LED
   }
 
@@ -178,27 +180,31 @@ class serialprotocol
     softserial->write(b);
     m_delay_sendLED = LED_DECAY;
     Serial.print("Send data ");
-    Serial.print(a);
+    Serial.print((unsigned char)a);
     Serial.print(" / ");
-    Serial.println(b);
+    Serial.println((unsigned char)b);
   }
 
-   void show_data_led()       // serial data send feedback LED
+   void show_data_led(void)       // serial data send feedback LED
    {
       if (m_delay_sendLED)
       {
         m_delay_sendLED--;
-        digitalWrite(m_pin_sendLED, m_delay_sendLED);
+        digitalWrite(m_pin_sendLED, !m_delay_sendLED);      //active LOW LED
       }
    }
    
 };
 
-pushbutton_withled btn_digital1(A1, 13, BTN_PREV, BTN_LONG_PREV);     // Define button input pin, LED output pin
-pushbutton_withled btn_digital2(A2, 13, BTN_NEXT, BTN_LONG_NEXT);
-pushbutton_withled btn_digital3(A3, 13, BTN_PAUSE, BTN_LONG_PAUSE);
-pushbutton_withled btn_digital4(A4, 13, BTN_LOAD, BTN_LONG_LOAD);
-cHeartBeat Heartbeat(10);                   // start heartbeat with LED pin number
+pushbutton_withled btn_digital1(A0, 6, BTN_PLAY, BTN_LONG_PLAY);     // Define button input pin, LED output pin
+pushbutton_withled btn_digital2(A1, 5, BTN_PAUSE, BTN_LONG_PAUSE);     // Define button input pin, LED output pin
+pushbutton_withled btn_digital3(A2, 4, BTN_LOAD, BTN_LONG_LOAD);
+pushbutton_withled btn_digital4(A3, 3, BTN_PREV, BTN_LONG_PREV);
+pushbutton_withled btn_digital5(A4, 2, BTN_NEXT, BTN_LONG_NEXT);
+cHeartBeat Heartbeat(9);                   // start heartbeat with LED pin number
+cHeartBeat Heartbeat13(13);                   // start heartbeat with LED pin number
+serialprotocol serialcomm(7, 8, 9600);      // initialize software serial
+
 
 
 unsigned long time_current;
@@ -208,12 +214,7 @@ void setup() {
   
   Serial.begin(115200);
   Serial.println("----------  Start push button example code -----------------");
-  pinMode(A5, OUTPUT);
-  digitalWrite(A5, LOW);    // make GND for 4 push button
-  pinMode(8, OUTPUT);
-  digitalWrite(8, LOW);     // make GND for heartbeat LED
-
-  
+  serialcomm.set_feedback_led(10);            // set data send feedback LED
 }
 
 void loop() {
@@ -223,23 +224,38 @@ void loop() {
   btn_digital2.scan(time_current);
   btn_digital3.scan(time_current);
   btn_digital4.scan(time_current);
+  btn_digital5.scan(time_current);
   Heartbeat.run();
+  Heartbeat13.run();
+  serialcomm.show_data_led();
 
-  switch(btn_digital1.m_result | btn_digital2.m_result | btn_digital3.m_result | btn_digital4.m_result)
+  switch(btn_digital1.m_result | btn_digital2.m_result | btn_digital3.m_result | btn_digital4.m_result | btn_digital5.m_result)
   {
     case BTN_NONE:
       break;
     case BTN_PREV:
       Serial.println("PREV pressed");
+      serialcomm.send2byte(0x33, 0xBB);
       break;
     case BTN_NEXT:
       Serial.println("NEXT pressed");
+      serialcomm.send2byte(0x11, 0xEE);
       break;
     case BTN_PAUSE:
       Serial.println("PAUSE pressed");
+      serialcomm.send2byte(0x22, 0xDD);
       break;
     case BTN_LOAD:
       Serial.println("LOAD pressed");
+      serialcomm.send2byte(0x24, 0xDB);
+      break;
+    case BTN_PLAY:
+      Serial.println("PLAY pressed");
+      serialcomm.send2byte(0x21, 0xDE);
+      break;
+    case BTN_LONG_PLAY:
+      Serial.println("PLAY LONG pressed");
+      serialcomm.send2byte(0x21, 0xEF);
       break;
     default:
       break;
