@@ -7,9 +7,10 @@
  *  Detect Long press
  *  Heartbeat LED class
  *  Softserial class
- *  
- *  
+ *  All LED : active LOW
+ *  All digital Button : detect failing edge (begin with pull up state)
  *  Last Modified 2020/9/4
+ *  
  */
 
 #include <SoftwareSerial.h>
