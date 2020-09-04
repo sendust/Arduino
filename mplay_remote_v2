@@ -3,7 +3,7 @@
  *   
  *  Digital input push button class
  *  Has button feed back LED
- *  detect failing edge -> .scan() function will return input pin number
+ *  detect failing edge -> .scan() function will return predefined value
  *  Detect Long press
  *  Heartbeat LED class
  *  Softserial class
@@ -197,8 +197,8 @@ class serialprotocol
    
 };
 
-pushbutton_withled btn_digital1(A0, 6, BTN_PLAY, BTN_LONG_PLAY);     // Define button input pin, LED output pin
-pushbutton_withled btn_digital2(A1, 5, BTN_PAUSE, BTN_LONG_PAUSE);     // Define button input pin, LED output pin
+pushbutton_withled btn_digital1(A0, 6, BTN_PLAY, BTN_LONG_PLAY);     // Define button input pin, LED output pin, return value / short press, long press
+pushbutton_withled btn_digital2(A1, 5, BTN_PAUSE, BTN_LONG_PAUSE);    
 pushbutton_withled btn_digital3(A2, 4, BTN_LOAD, BTN_LONG_LOAD);
 pushbutton_withled btn_digital4(A3, 3, BTN_PREV, BTN_LONG_PREV);
 pushbutton_withled btn_digital5(A4, 2, BTN_NEXT, BTN_LONG_NEXT);
@@ -228,7 +228,7 @@ void loop() {
   btn_digital5.scan(time_current);
   Heartbeat.run();
   Heartbeat13.run();
-  serialcomm.show_data_led();
+  serialcomm.show_data_led();       // LED on with data send
 
   switch(btn_digital1.m_result | btn_digital2.m_result | btn_digital3.m_result | btn_digital4.m_result | btn_digital5.m_result)
   {
