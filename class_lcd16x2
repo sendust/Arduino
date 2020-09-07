@@ -1,0 +1,75 @@
+/* Arduino LCD
+ * LCD class for LCD Keypad shield
+ * Made by sendust 2020/9/7
+ * 
+ * 
+ */
+
+#include <LiquidCrystal.h>
+
+
+class LiquidCrystal_sheild
+{ 
+   private:
+   LiquidCrystal* _ptr_lcd;
+    int _backlight;
+
+   public:
+   LiquidCrystal_sheild()
+   {
+      _ptr_lcd = new LiquidCrystal(8, 9, 4, 5, 6, 7);
+      _ptr_lcd->begin(16, 2);
+      pinMode(10, OUTPUT);        // set backlight control pin as output
+      digitalWrite(10, HIGH);     // control LCD backlight
+   }
+
+    void printat(int x, int y, char* ptr_string)
+    {
+      _ptr_lcd->setCursor(x, y);
+      _ptr_lcd->print(ptr_string);
+    }
+
+    void printat(int x, int y, long number)
+    {
+      _ptr_lcd->setCursor(x, y);
+      _ptr_lcd->print(number);
+    }
+
+    void printat(int x, int y, double number)
+    {
+      _ptr_lcd->setCursor(x, y);
+      _ptr_lcd->print(number);
+    }
+
+    void backlight(bool control)
+    {
+      _backlight = control;
+      digitalWrite(10, _backlight);
+    }
+
+    void backlight_toggle()
+    {
+      _backlight = !_backlight;
+      digitalWrite(10, _backlight);
+    }
+};
+
+LiquidCrystal_sheild lcd;
+long count = 0;
+ 
+void setup() {
+  // put your setup code here, to run once:
+  lcd.backlight(1);       // turn on LCD
+  lcd.printat(0, 0, "Begin LCD class ");
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  if ((count % 10000) == 0)
+  {
+    lcd.printat(0, 1, "         ");
+    lcd.printat(0, 1, count);
+  }
+   count++;
+}
