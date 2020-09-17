@@ -1,0 +1,402 @@
+/*
+ SBS TS-4 IR Remote commander by sendust
+ Created 2020/9/17
+ Code maintained by sendust
+ IR Send must connect to pin 3 (PWM)
+ IR Recv must connect to pin 2 (Timer)
+ */
+
+#include <SoftwareSerial.h>
+#include <IRremote.h>
+
+
+#define LED_DECAY 5000
+#define BUTTON_DELAY 80
+#define LONGPRESS 30000
+
+SoftwareSerial sSerial(A3, A4); // RX, TX
+
+
+class irsender
+{
+  private:
+  IRsend *_irsend;
+
+  public:
+  irsender()
+  {
+    _irsend = new IRsend;
+  }
+  
+};
+
+
+
+class irreceiver
+{
+  private:
+  IRrecv *_irrecv;
+  unsigned long _delay_recv = 0;
+
+  public:
+  irreceiver(int pin_receiver)
+  {
+    _irrecv = new IRrecv(pin_receiver);
+    _irrecv->enableIRIn();
+    _delay_recv = 0;
+  }
+
+  bool scan(decode_results *presult)
+  {
+    
+    if (_delay_recv)            // prevent successive IR data
+    {
+      _delay_recv--;
+      return 0;
+    }
+    
+    if (_irrecv->decode(presult))
+    {
+      Serial.println(presult->value, HEX);
+      _irrecv->resume();
+      _delay_recv = 1000;
+      return 1;
+    }
+    return 0;
+  }
+  
+};
+
+
+class pushbutton
+{
+  private:
+  int m_keyinput;
+  int m_button_previous;
+  int m_button_now;
+  int m_result;
+  unsigned long m_longpress;
+  unsigned int m_count_push = 0;
+  unsigned long m_last_transition;
+  const unsigned long m_guard_time = 0xFFFFFFFF - BUTTON_DELAY;
+
+  public:
+
+  pushbutton(int keyinput)   // Initiator (define button input pin, led outpupt pin)
+  {
+    m_keyinput = keyinput;
+    pinMode(keyinput, INPUT_PULLUP);
+    m_last_transition = millis();
+    m_button_previous = digitalRead(keyinput);
+    m_button_now = digitalRead(keyinput);
+    m_longpress = 0;
+  }
+
+  int scan(unsigned long time_milli)
+  {
+    m_button_now = digitalRead(m_keyinput);
+    m_result = 0;
+    if (m_button_now == 0)
+    {
+      m_longpress++;                        // detect long press
+      if (m_longpress == LONGPRESS)
+        m_result = m_keyinput + 100;        // return switch pin number * 100
+
+      if (m_button_previous == 1)
+        if (time_milli - m_last_transition > BUTTON_DELAY)
+          if (time_milli - m_last_transition < m_guard_time)     // prevent unsigned long overflow event
+          {
+            m_last_transition = time_milli;
+            m_result = m_keyinput;          // return switch pin number
+          }
+    }
+        
+    if (m_button_now == 1)
+    {
+      m_longpress = 0;                    // initialize long press count
+      if (m_button_previous == 0)
+        m_last_transition = time_milli;   // Record release time
+    }
+
+    m_button_previous = m_button_now;
+    
+    if (m_result)
+    {
+      Serial.print("return value is ");
+      Serial.print(m_result);
+      Serial.print("  //  press count = ");
+      Serial.println(++m_count_push);
+    }
+
+    return m_result;
+  }
+};
+
+
+class cHeartBeat
+{
+  private:
+  unsigned long m_count;
+  int m_pinLED;
+  unsigned long m_mask;
+
+  public:
+  cHeartBeat(int pinLED)            // define heartbeat LED pin
+  {
+    pinMode(pinLED, OUTPUT);
+    digitalWrite(pinLED, LOW);
+    m_pinLED = pinLED;
+    m_count = 0;
+    m_mask = 0x00003E00;
+  }
+
+  run()
+  {
+    // Serial.println(m_mask);
+    m_count++;
+    digitalWrite(m_pinLED, !((m_count & m_mask) && 1));
+  }
+  
+};
+
+
+
+int printtextat(SoftwareSerial *serial, char x, char y, char *pstring)
+{
+  int count = 0;
+  Serial.print("Print string is ");
+  
+  serial->print((char)0xA1);      // set cursor location
+  serial->print((char) x);
+  serial->print((char) y);
+  
+  serial->print((char)0xA2);
+  while(*pstring)
+  {
+    serial->print((char)*pstring);
+    Serial.print(*pstring);
+    pstring++;
+    count++;
+  }
+  serial->print((char)0x00);
+
+  Serial.println();
+  Serial.print("Print character count is ");
+  Serial.println(count);
+
+
+  return count;
+}
+
+
+void lcdclear(SoftwareSerial *serial)      // Clear LCD Screen
+{
+  serial->print((char)0xA3);
+  serial->print((char)0x01);
+}
+
+void lcdcursor(SoftwareSerial *serial, bool onoff)      // Clear LCD Screen
+{
+  char cmd = 0x0C;   //  (cursor on : 0x0E, cursor off : 0x0C)
+  if (onoff)
+    cmd = 0x0E;
+  serial->print((char)0xA3);
+  serial->print((char)cmd);
+}
+
+int printnumberat(SoftwareSerial *serial, char x, char y, unsigned long number)
+{
+  String mystring(number);
+  Serial.print("Number of digit is --- ");
+  Serial.println(mystring.length());
+  char pstring[mystring.length()+1];      // Convert number to string
+  int i;
+  for (i = 0 ; i < mystring.length() ; i++)
+  {
+    pstring[i] = (char)mystring.charAt(i);
+  }
+  pstring[mystring.length()] = 0;         // Finialize string array
+  return printtextat(serial, x, y, pstring);
+
+}
+
+int printStringat(SoftwareSerial *serial, char x, char y, String string)      // print Arduino String type
+{
+  char pstring[string.length()+1];      // Convert number to string
+  int i;
+  for (i = 0 ; i < string.length() ; i++)
+  {
+    pstring[i] = (char)string.charAt(i);
+  }
+  pstring[string.length()] = 0;         // Finialize string array
+  return printtextat(serial, x, y, pstring);
+}
+
+
+class cVccControl4
+{
+  private:
+  unsigned int count = 0;
+  unsigned int modular = 0;
+  int pin1, pin2, pin3, pin4, pin11, pin12, pin13, pin14;
+  bool toggle_all = 0;
+  
+  public:
+  cVccControl4(int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8)
+  {
+    pinMode(p1, OUTPUT);
+    pinMode(p2, OUTPUT);
+    pinMode(p3, OUTPUT);
+    pinMode(p4, OUTPUT);
+    pinMode(p4, OUTPUT);
+    pinMode(p5, OUTPUT);
+    pinMode(p6, OUTPUT);
+    pinMode(p7, OUTPUT);
+    pinMode(p8, OUTPUT);
+    digitalWrite(p1, LOW);
+    digitalWrite(p2, LOW);
+    digitalWrite(p3, LOW);
+    digitalWrite(p4, LOW);
+    digitalWrite(p5, LOW);
+    digitalWrite(p6, LOW);
+    digitalWrite(p7, LOW);
+    digitalWrite(p8, LOW);
+    pin1 = p1;
+    pin2 = p2;
+    pin3 = p3;
+    pin4 = p4;
+    pin11 = p5;
+    pin12 = p6;
+    pin13 = p7;
+    pin14 = p8;
+  }
+  
+  int select(int input)
+  {
+    digitalWrite(pin1, LOW);
+    digitalWrite(pin2, LOW);
+    digitalWrite(pin3, LOW);
+    digitalWrite(pin4, LOW);
+    digitalWrite(pin11, LOW);
+    digitalWrite(pin12, LOW);
+    digitalWrite(pin13, LOW);
+    digitalWrite(pin14, LOW);
+    
+      count++;
+      modular = count % 6;
+      switch(modular)
+      {
+        case 0:
+        digitalWrite(pin1, HIGH);
+        digitalWrite(pin11, HIGH);
+        Serial.println("pin 1 Activated");
+        printtextat(&sSerial, 0,0, "Select Monitor 1");
+        break;
+
+        case 1:
+        digitalWrite(pin2, HIGH);
+        digitalWrite(pin12, HIGH);
+        Serial.println("pin 2 Activated");
+        printtextat(&sSerial, 0,0, "Select Monitor 2");
+        break;
+
+        case 2:
+        digitalWrite(pin3, HIGH);
+        digitalWrite(pin13, HIGH);
+        Serial.println("pin 3 Activated");
+        printtextat(&sSerial, 0,0, "Select Monitor 3");
+        break;
+
+        case 3:
+        digitalWrite(pin4, HIGH);
+        digitalWrite(pin14, HIGH);
+        Serial.println("pin 4 Activated");
+        printtextat(&sSerial, 0,0, "Select Monitor 4");
+        break;
+
+        case 4:
+        Serial.println("Vcc all off");                      // Vcc all off
+        printtextat(&sSerial, 0,0, "                ");
+        printtextat(&sSerial, 0,0, "Select NONE");
+        break;
+
+
+        case 5:
+        digitalWrite(pin1, HIGH);
+        digitalWrite(pin2, HIGH);
+        digitalWrite(pin3, HIGH);
+        digitalWrite(pin4, HIGH);
+        digitalWrite(pin11, HIGH);
+        digitalWrite(pin12, HIGH);
+        digitalWrite(pin13, HIGH);
+        digitalWrite(pin14, HIGH);
+        Serial.println("Vcc all ON");                      // Vcc all ON
+        printtextat(&sSerial, 0,0, "                ");
+        printtextat(&sSerial, 0,0, "Select ALL");
+        break;
+
+        default:
+        break;
+        
+      }
+    }
+
+
+  
+};
+
+
+
+irsender irs;
+irreceiver irr(2);
+pushbutton btn1(A1);
+pushbutton btn2(A2);
+cHeartBeat beatled(13);
+cVccControl4 Vcc(A0, 7, 8, 10, 9, 4, 5, 6);
+
+
+unsigned long time_millis = millis();
+
+void setup() {
+  // Open serial communications and wait for port to open:
+  Serial.begin(115200);
+
+  // set the data rate for the SoftwareSerial port
+  sSerial.begin(19200);
+  
+  lcdclear(&sSerial);
+  printtextat(&sSerial, 0,0, "Welcome to");
+  printtextat(&sSerial, 0,1, "IR Commander");
+  lcdcursor(&sSerial, 0);       // remove cursor
+}
+
+
+void loop() { // run over and over
+  
+  decode_results ir_result;
+  time_millis = millis();
+  
+  if (irr.scan(&ir_result))
+  {
+    printtextat(&sSerial, 0, 1, "                ");
+    printStringat(&sSerial, 0, 1, String(ir_result.value, HEX));
+  }
+
+  switch(btn1.scan(time_millis) | btn2.scan(time_millis))
+  {
+     case A1:     // press A1
+      Serial.println("A1 button Pressed"); 
+      Vcc.select(A1);
+      break;
+    
+     case A2:     // press A2
+     Serial.println("A2 button Pressed");
+      break;
+
+     default:
+      break;
+   
+  }
+  beatled.run();
+
+}
