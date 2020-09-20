@@ -10,6 +10,8 @@ IRsend Class public member function
 void  sendSAMSUNG (unsigned long data, int nbits)
 void  sendLG (unsigned long data, int nbits)
 
+2020/9/19
+Introduce irreceiver class
 
  */
 
@@ -304,7 +306,39 @@ class cVccControl4
 };
 
 
-IRrecv irrecv(IR_RECEIVE_PIN);
+class irreceiver                      // customized IRrecv object
+{
+  private:
+  IRrecv _irrecv;
+
+  public:
+  irreceiver(int pin_input) : _irrecv(pin_input) { }
+
+  void irstart()
+  {
+    _irrecv.enableIRIn(); 
+  }
+
+  bool scan(decode_results *results)
+  {
+    if (_irrecv.decode(results))
+    {
+      _irrecv.resume();
+      if (results->value == 0xFFFFFFFF)     // prevent repeat code
+        return 0;
+      return 1;
+    }
+    else
+      return 0;
+  }
+
+};
+
+
+
+//IRrecv irrecv(IR_RECEIVE_PIN);
+
+irreceiver irr(2);
 IRsend irsend;
 
 pushbutton btn1(A1);
@@ -322,7 +356,8 @@ void setup() {
   // set the data rate for the SoftwareSerial port
   sSerial.begin(19200);
 
-  irrecv.enableIRIn(); // Start the receiver
+  //irrecv.enableIRIn(); // Start the receiver
+  irr.irstart();
 
   lcdclear(&sSerial);
   printtextat(&sSerial, 0,0, "Welcome to");
@@ -336,12 +371,12 @@ void loop() { // run over and over
   decode_results ir_result;
   time_millis = millis();
   
-  if (irrecv.decode(&ir_result))
+  // if (irrecv.decode(&ir_result))
+  if (irr.scan(&ir_result))
   {
     printtextat(&sSerial, 0, 1, "                ");
     printStringat(&sSerial, 0, 1, String(ir_result.value, HEX));
     Serial.println(ir_result.value, HEX);
-    irrecv.resume();
   }
 
   switch(btn1.scan(time_millis) | btn2.scan(time_millis))
