@@ -12,6 +12,10 @@ void  sendLG (unsigned long data, int nbits)
 
 2020/9/19
 Introduce irreceiver class
+2020/9/21
+introduce COMPILE LCD class
+Vcc control pin changed (from digital output -> digital input, HI-Z mode)
+
 
  */
 
@@ -23,10 +27,7 @@ Introduce irreceiver class
 #define BUTTON_DELAY 80
 #define LONGPRESS 30000
 #define IR_RECEIVE_PIN 2
-
-SoftwareSerial sSerial(A3, A4); // RX, TX
-
-
+#define IR_SEND_PIN  3              // Arduino Mega
 
 class pushbutton
 {
@@ -120,77 +121,95 @@ class cHeartBeat
 };
 
 
-
-int printtextat(SoftwareSerial *serial, char x, char y, char *pstring)
+class compilelcd
 {
-  int count = 0;
-  Serial.print("Print string is ");
+  private:
+  SoftwareSerial _sSerial;
   
-  serial->print((char)0xA1);      // set cursor location
-  serial->print((char) x);
-  serial->print((char) y);
+  public:
+  compilelcd(int pin_rx, int pin_tx) : _sSerial(pin_rx, pin_tx) {}
+
+  void start()
+  {
+    _sSerial.begin(19200);
+  }
+
+    void lcdclear()      // Clear LCD Screen
+  {
+    _sSerial.print((char)0xA3);
+    _sSerial.print((char)0x01);
+  }
+
+  void lcdcursor(bool onoff)      // cursor control (on, off)
+  {
+    char cmd = 0x0C;   //  (cursor on : 0x0E, cursor off : 0x0C)
+    if (onoff)
+      cmd = 0x0E;
+    _sSerial.print((char)0xA3);
+    _sSerial.print((char)cmd);
+  }
+
+
+  int printtextat(char x, char y, char *pstring)
+  {
+    int count = 0;
+    Serial.print("Print string is ");
+    
+    _sSerial.print((char)0xA1);      // set cursor location
+    _sSerial.print((char) x);
+    _sSerial.print((char) y);
+    
+    _sSerial.print((char)0xA2);
+    while(*pstring)
+    {
+      _sSerial.print((char)*pstring);
+      Serial.print(*pstring);
+      pstring++;
+      count++;
+    }
+    _sSerial.print((char)0x00);
+    
+    Serial.println();
+    Serial.print("Print character count is ");
+    Serial.println(count);
+
+    return count; 
+  }
+
   
-  serial->print((char)0xA2);
-  while(*pstring)
+  int printnumberat(char x, char y, unsigned long number)
   {
-    serial->print((char)*pstring);
-    Serial.print(*pstring);
-    pstring++;
-    count++;
+    String mystring(number);
+    Serial.print("Number of digit is --- ");
+    Serial.println(mystring.length());
+    char pstring[mystring.length()+1];      // Convert number to string
+    int i;
+    for (i = 0 ; i < mystring.length() ; i++)
+    {
+      pstring[i] = (char)mystring.charAt(i);
+    }
+    pstring[mystring.length()] = 0;         // Finialize string array
+    return printtextat(x, y, pstring);
+  
   }
-  serial->print((char)0x00);
-
-  Serial.println();
-  Serial.print("Print character count is ");
-  Serial.println(count);
-
-
-  return count;
-}
-
-
-void lcdclear(SoftwareSerial *serial)      // Clear LCD Screen
-{
-  serial->print((char)0xA3);
-  serial->print((char)0x01);
-}
-
-void lcdcursor(SoftwareSerial *serial, bool onoff)      // Clear LCD Screen
-{
-  char cmd = 0x0C;   //  (cursor on : 0x0E, cursor off : 0x0C)
-  if (onoff)
-    cmd = 0x0E;
-  serial->print((char)0xA3);
-  serial->print((char)cmd);
-}
-
-int printnumberat(SoftwareSerial *serial, char x, char y, unsigned long number)
-{
-  String mystring(number);
-  Serial.print("Number of digit is --- ");
-  Serial.println(mystring.length());
-  char pstring[mystring.length()+1];      // Convert number to string
-  int i;
-  for (i = 0 ; i < mystring.length() ; i++)
+  
+  int printStringat(char x, char y, String string)      // print Arduino String type
   {
-    pstring[i] = (char)mystring.charAt(i);
+    char pstring[string.length()+1];      // Convert number to string
+    int i;
+    for (i = 0 ; i < string.length() ; i++)
+    {
+      pstring[i] = (char)string.charAt(i);
+    }
+    pstring[string.length()] = 0;         // Finialize string array
+    return printtextat(x, y, pstring);
   }
-  pstring[mystring.length()] = 0;         // Finialize string array
-  return printtextat(serial, x, y, pstring);
 
-}
+};
 
-int printStringat(SoftwareSerial *serial, char x, char y, String string)      // print Arduino String type
-{
-  char pstring[string.length()+1];      // Convert number to string
-  int i;
-  for (i = 0 ; i < string.length() ; i++)
-  {
-    pstring[i] = (char)string.charAt(i);
-  }
-  pstring[string.length()] = 0;         // Finialize string array
-  return printtextat(serial, x, y, pstring);
-}
+
+///// Create COMPILE LED OBJECT //////////////////////////////////////////////////////////////////////////////
+compilelcd clcd(A3, A4);      // RX, TX pin
 
 
 class cVccControl4
@@ -204,19 +223,16 @@ class cVccControl4
   public:
   cVccControl4(int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8)
   {
-    pinMode(p1, OUTPUT);
-    pinMode(p2, OUTPUT);
-    pinMode(p3, OUTPUT);
-    pinMode(p4, OUTPUT);
-    pinMode(p4, OUTPUT);
-    pinMode(p5, OUTPUT);
-    pinMode(p6, OUTPUT);
-    pinMode(p7, OUTPUT);
-    pinMode(p8, OUTPUT);
-    digitalWrite(p1, LOW);
-    digitalWrite(p2, LOW);
-    digitalWrite(p3, LOW);
-    digitalWrite(p4, LOW);
+    pinMode(p1, INPUT);        // IR Vcc control, Begin with HI-Z
+    pinMode(p2, INPUT);        // IR Vcc control, Begin with HI-Z
+    pinMode(p3, INPUT);        // IR Vcc control, Begin with HI-Z
+    pinMode(p4, INPUT);        // IR Vcc control, Begin with HI-Z
+    
+    pinMode(p5, OUTPUT);        // BTN LED control
+    pinMode(p6, OUTPUT);        // BTN LED control
+    pinMode(p7, OUTPUT);        // BTN LED control
+    pinMode(p8, OUTPUT);        // BTN LED control
+
     digitalWrite(p5, LOW);
     digitalWrite(p6, LOW);
     digitalWrite(p7, LOW);
@@ -231,12 +247,13 @@ class cVccControl4
     pin14 = p8;
   }
   
-  int select(int input)
+  int select()
   {
-    digitalWrite(pin1, LOW);
-    digitalWrite(pin2, LOW);
-    digitalWrite(pin3, LOW);
-    digitalWrite(pin4, LOW);
+    pinMode(pin1, INPUT);
+    pinMode(pin2, INPUT);
+    pinMode(pin3, INPUT);
+    pinMode(pin4, INPUT);
+    
     digitalWrite(pin11, LOW);
     digitalWrite(pin12, LOW);
     digitalWrite(pin13, LOW);
@@ -247,41 +264,49 @@ class cVccControl4
       switch(modular)
       {
         case 0:
+        pinMode(pin1, OUTPUT);        // setup IR_Vcc control
         digitalWrite(pin1, HIGH);
         digitalWrite(pin11, HIGH);
         Serial.println("pin 1 Activated");
-        printtextat(&sSerial, 0,0, "Select Monitor 1");
+        clcd.printtextat(0,0, "Select Monitor 1");
         break;
 
         case 1:
+        pinMode(pin2, OUTPUT);        // setup IR_Vcc control
         digitalWrite(pin2, HIGH);
         digitalWrite(pin12, HIGH);
         Serial.println("pin 2 Activated");
-        printtextat(&sSerial, 0,0, "Select Monitor 2");
+        clcd.printtextat(0,0, "Select Monitor 2");
         break;
 
         case 2:
+        pinMode(pin3, OUTPUT);        // setup IR_Vcc control
         digitalWrite(pin3, HIGH);
         digitalWrite(pin13, HIGH);
         Serial.println("pin 3 Activated");
-        printtextat(&sSerial, 0,0, "Select Monitor 3");
+        clcd.printtextat(0,0, "Select Monitor 3");
         break;
 
         case 3:
+        pinMode(pin4, OUTPUT);        // setup IR_Vcc control
         digitalWrite(pin4, HIGH);
         digitalWrite(pin14, HIGH);
         Serial.println("pin 4 Activated");
-        printtextat(&sSerial, 0,0, "Select Monitor 4");
+        clcd.printtextat(0,0, "Select Monitor 4");
         break;
 
         case 4:
         Serial.println("Vcc all off");                      // Vcc all off
-        printtextat(&sSerial, 0,0, "                ");
-        printtextat(&sSerial, 0,0, "Select NONE");
+        clcd.printtextat(0,0, "                ");
+        clcd.printtextat(0,0, "Select NONE");
         break;
 
 
         case 5:
+        pinMode(pin1, OUTPUT);        // setup IR_Vcc control
+        pinMode(pin2, OUTPUT);        // setup IR_Vcc control
+        pinMode(pin3, OUTPUT);        // setup IR_Vcc control
+        pinMode(pin4, OUTPUT);        // setup IR_Vcc control
         digitalWrite(pin1, HIGH);
         digitalWrite(pin2, HIGH);
         digitalWrite(pin3, HIGH);
@@ -291,8 +316,8 @@ class cVccControl4
         digitalWrite(pin13, HIGH);
         digitalWrite(pin14, HIGH);
         Serial.println("Vcc all ON");                      // Vcc all ON
-        printtextat(&sSerial, 0,0, "                ");
-        printtextat(&sSerial, 0,0, "Select ALL");
+        clcd.printtextat(0,0, "                ");
+        clcd.printtextat(0,0, "Select ALL");
         break;
 
         default:
@@ -310,7 +335,8 @@ class irreceiver                      // customized IRrecv object
 {
   private:
   IRrecv _irrecv;
-
+  unsigned long count = 0;
+  
   public:
   irreceiver(int pin_input) : _irrecv(pin_input) { }
 
@@ -353,16 +379,15 @@ void setup() {
   // Open serial communications and wait for port to open:
   Serial.begin(115200);
 
-  // set the data rate for the SoftwareSerial port
-  sSerial.begin(19200);
-
+  // Start compile LCD
+  clcd.start();
+  clcd.lcdclear();
   //irrecv.enableIRIn(); // Start the receiver
   irr.irstart();
 
-  lcdclear(&sSerial);
-  printtextat(&sSerial, 0,0, "Welcome to");
-  printtextat(&sSerial, 0,1, "IR Commander");
-  lcdcursor(&sSerial, 0);       // remove cursor
+  clcd.printtextat(0,0, "Welcome to");
+  clcd.printtextat(0,1, "IR Commander");
+  clcd.lcdcursor(0);       // remove cursor
 }
 
 
@@ -374,16 +399,17 @@ void loop() { // run over and over
   // if (irrecv.decode(&ir_result))
   if (irr.scan(&ir_result))
   {
-    printtextat(&sSerial, 0, 1, "                ");
-    printStringat(&sSerial, 0, 1, String(ir_result.value, HEX));
+    clcd.printtextat(0, 1, "                ");
+    clcd.printStringat(0, 1, String(ir_result.value, HEX));
     Serial.println(ir_result.value, HEX);
+    // irsend.sendSAMSUNG(0xE0E0807F, 32);      // send samsung TV/VIDEO
   }
 
   switch(btn1.scan(time_millis) | btn2.scan(time_millis))
   {
      case A1:     // press A1
       Serial.println("A1 button Pressed"); 
-      Vcc.select(A1);
+      Vcc.select();
       break;
     
      case A2:     // press A2
