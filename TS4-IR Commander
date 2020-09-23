@@ -10,6 +10,10 @@ IRsend Class public member function
 void  sendSAMSUNG (unsigned long data, int nbits)
 void  sendLG (unsigned long data, int nbits)
 
+
+LG remote -   Decode type = 3, Decode BITS = 32
+
+
 2020/9/19
 Introduce irreceiver class
 2020/9/21
@@ -345,6 +349,11 @@ class irreceiver                      // customized IRrecv object
     _irrecv.enableIRIn(); 
   }
 
+  void irresume()
+  {
+    _irrecv.resume();
+  }
+
   bool scan(decode_results *results)
   {
     if (_irrecv.decode(results))
@@ -370,6 +379,7 @@ IRsend irsend;
 pushbutton btn1(A1);
 pushbutton btn2(A2);
 cHeartBeat beatled(13);
+cHeartBeat beatled2(11);
 cVccControl4 Vcc(A0, 7, 8, 10, 9, 4, 5, 6);
 
 
@@ -387,7 +397,7 @@ void setup() {
 
   clcd.printtextat(0,0, "Welcome to");
   clcd.printtextat(0,1, "IR Commander");
-  clcd.lcdcursor(0);       // remove cursor
+  clcd.lcdcursor(0);           // remove cursor
 }
 
 
@@ -396,13 +406,21 @@ void loop() { // run over and over
   decode_results ir_result;
   time_millis = millis();
   
-  // if (irrecv.decode(&ir_result))
   if (irr.scan(&ir_result))
   {
     clcd.printtextat(0, 1, "                ");
     clcd.printStringat(0, 1, String(ir_result.value, HEX));
     Serial.println(ir_result.value, HEX);
-    // irsend.sendSAMSUNG(0xE0E0807F, 32);      // send samsung TV/VIDEO
+    Serial.print("Decode type = ");
+    Serial.println(ir_result.decode_type);
+    Serial.print("Decode BITS = ");
+    Serial.println(ir_result.bits);
+    if (ir_result.decode_type == 3)       // Check if Remote Protocol is LG 
+    {
+      irsend.sendLG(ir_result.value, 32);       // send samsung TV/VIDEO
+      delay(50);
+      irr.irstart();                       // mandatory line after ir transmission !!!!!
+    }
   }
 
   switch(btn1.scan(time_millis) | btn2.scan(time_millis))
@@ -414,13 +432,19 @@ void loop() { // run over and over
     
      case A2:     // press A2
      Serial.println("A2 button Pressed");
-     irsend.sendSAMSUNG(0xE0E0807F, 32);      // send samsung TV/VIDEO
-      break;
+     clcd.printtextat(0, 1, "                ");
+     clcd.printtextat(0, 1, "CHANGE INPUT    ");
+     irsend.sendLG(0x20dfd02f, 32);           // send LG TV/VIDEO
+     delay(50);
+     irsend.sendSAMSUNG(0xe0e0807f, 32);      // send samsung TV/VIDEO
+     delay(50);
+     irr.irstart();                       // mandatory line after ir transmission !!!!!
+     break;
 
      default:
       break;
    
   }
   beatled.run();
-
+  beatled2.run();
 }
